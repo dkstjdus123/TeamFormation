@@ -1,0 +1,10 @@
+# 작성: 2026-10-29 22:01
+# 키와 비밀번호가 든 파일은 절대 올리지 않습니다.
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+__pycache__/
+.pytest_cache/
+*.zip

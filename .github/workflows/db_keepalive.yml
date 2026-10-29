@@ -1,0 +1,22 @@
+# 작성: 2026-10-29 22:01
+# Supabase DB가 일시정지되지 않도록 매일 한 번 DB에 질의합니다(3장 "DB 일시정지되지 않게"의 어려운 해결).
+# 저장소 Settings > Secrets and variables > Actions 에 DATABASE_URL을 넣어야 동작합니다.
+name: db-keepalive
+
+on:
+  schedule:
+    - cron: "17 3 * * *"  # 매일 한국 시각 12:17
+  workflow_dispatch:       # Actions 화면에서 손으로도 실행할 수 있음
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "psycopg[binary]==3.3.6"
+      - run: python 디비_깨우기.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
