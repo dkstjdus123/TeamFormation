@@ -28,11 +28,11 @@
 
 ## 4. 쓴 모델 3개
 
-(실제로 쓴 모델로 고쳐 적기. Streamlit Secrets의 `AI_MODEL_1~3`으로 바꿀 수 있음)
+(오픈라우터 무료 글 모델 가운데 많이 쓰이고 응답이 빠른 것으로 골랐고, 1차와 2차는 회사를 달리함. Streamlit Secrets의 `AI_MODEL_1~3`으로 바꿀 수 있음)
 
-- 1차 `nvidia/nemotron-3-super-120b-a12b:free`
-- 2차 `openai/gpt-oss-120b:free`
-- 3차 `z-ai/glm-4.5-air:free`
+- 1차 `nvidia/nemotron-3.5-lightning:free`
+- 2차 `google/gemma-4-26b-a4b-it:free`
+- 3차 `nvidia/nemotron-3-ultra-550b-a55b:free`
 
 ## 5. 오픈라우터 AI 모델 호출 실패 사례
 

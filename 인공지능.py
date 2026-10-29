@@ -1,4 +1,4 @@
-# 작성: 2026-10-29 21:52
+# 작성: 2026-10-29 21:52 (수정: 2026-10-30 00:41 기본 모델을 오픈라우터에 지금 있는 무료 모델로 바꿈)
 """오픈라우터 AI 호출. 모델마다 전체 대기 시간을 재서 제한초가 넘으면 끊고 다음 모델로 넘어갑니다."""
 
 import json
@@ -16,9 +16,9 @@ from 규칙 import 최대인원
 오픈라우터주소 = "https://openrouter.ai/api/v1/chat/completions"
 모델제한초 = 120
 기본모델들 = (
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "openai/gpt-oss-120b:free",
-    "z-ai/glm-4.5-air:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
 )
 
 
