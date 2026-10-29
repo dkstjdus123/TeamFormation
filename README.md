@@ -6,7 +6,7 @@
 
 ## 1. 배포 주소
 
-(배포한 뒤 적기. 예: https://tf-abc123.streamlit.app)
+https://dkstjdus123-teamformation.streamlit.app
 
 ## 2. PRD와 구현 계획
 
