@@ -192,3 +192,18 @@ def test_비밀번호는_해시로_저장된다(풀, 비밀번호):
     with 풀.connection() as 연결:
         해시들 = [줄["password_hash"] for 줄 in 연결.execute("select password_hash from tf_students")]
     assert all(해시.startswith("$2") and 비밀번호 not in 해시 for 해시 in 해시들)
+
+
+def test_AI를_끄면_바로_앱이_배정하고_지원기록이_남는다(풀):
+    진 = 진행(풀, 올리기(풀, "쉬움.csv", 3))
+    진.지원("학생1", 1, "승인")
+    진.지원("학생4", 1, "대기")
+    진.투표("학생1", "학생4", False, "거절")
+    기록 = 서비스.지원기록_읽기(풀, 진.학번["학생4"])
+    assert [(줄["팀"], 줄["상태"], 줄["사유"]) for 줄 in 기록] == [("팀1", "거절", "팀원 거부")]
+    assert len(서비스.지원기록_읽기(풀)) == 2
+    서비스.모집_마감(풀)
+    부른횟수 = []
+    결과, _ = 서비스.AI_배정(풀, "test-key", ["a", "b", "c"], 진행표시=부른횟수.append, AI사용=False)
+    assert 결과.startswith("승인: AI를 부르지 않고") and 부른횟수 == []
+    assert 서비스.배정_확정(풀).startswith("승인")

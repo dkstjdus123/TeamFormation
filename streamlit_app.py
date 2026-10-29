@@ -1,4 +1,4 @@
-# 작성: 2026-10-29 21:57
+# 작성: 2026-10-29 21:57 (수정: 2026-10-29 22:55 시범 앱 녹화를 보고 지원 기록, AI 끄기, 팀 칸 나란히 보기 추가)
 """팀 프로젝트를 위한 팀 편성 웹 앱(Streamlit).
 
 화면 요소의 key는 공고 2.7절 표를 그대로 따릅니다. 자동 채점 프로그램이 key로 요소를 찾기 때문입니다.
@@ -19,7 +19,7 @@ from 디비 import 스키마_만들기, 연결풀_만들기
 다시그리기초 = 3
 한국시간 = ZoneInfo("Asia/Seoul")
 
-st.set_page_config(page_title="팀 편성", page_icon="👥")
+st.set_page_config(page_title="팀 편성", page_icon="👥", layout="wide")
 load_dotenv()
 
 
@@ -82,6 +82,26 @@ def 팀원_줄(사람):
     return f"- {사람.표시()}"
 
 
+def 팀칸들(팀수):
+    """팀 카드를 한 줄에 4개까지 나란히 놓을 칸을 만듭니다."""
+    return [칸 for 시작 in range(0, 팀수, 4) for 칸 in st.columns(4)][:팀수]
+
+
+def 지원기록_표(기록들, 지원자_보임):
+    if not 기록들:
+        st.caption("지원 기록이 없습니다.")
+        return
+    줄들 = []
+    for 기록 in 기록들:
+        줄 = {"지원자": 기록["지원자"]} if 지원자_보임 else {}
+        줄 |= {"팀": 기록["팀"], "상태": 기록["상태"], "사유": 기록["사유"]}
+        if 지원자_보임:
+            줄["찬성"] = 기록["찬성"]
+        줄["시각"] = 기록["시각"].astimezone(한국시간).strftime("%m-%d %H:%M:%S")
+        줄들.append(줄)
+    st.dataframe(줄들, hide_index=True)
+
+
 # ---------------------------------------------------------------- 로그인
 
 
@@ -134,15 +154,22 @@ def 학생_본문(풀, 학번):
     if 내지원:
         팀원수 = len(상태.팀(내지원.팀번호)["팀원"])
         st.info(f"{팀이름들[내지원.팀번호]}에 지원함: 대기 중 (찬성 {len(내지원.찬성)}명 / 팀원 {팀원수}명)")
-    elif (최근 := 상태.최근지원.get(학번)) and 최근["상태"] == "거절":
+    elif 내팀 is None and (최근 := 상태.최근지원.get(학번)) and 최근["상태"] == "거절":
         st.caption(f"최근 지원: {팀이름들[최근['팀번호']]} 거절 ({최근['사유']}). 다른 팀에 다시 지원할 수 있습니다.")
     if 상태.마감:
         st.warning("모집이 마감되어 지원과 투표를 할 수 없습니다.")
 
     지원막힘 = 내팀 is not None or 내지원 is not None or 상태.마감
     st.subheader("팀 목록")
-    for 팀 in 상태.팀들:
-        with st.container(key=f"team_{팀['번호']}", border=True):
+    if 내팀 is not None:
+        st.caption(f"지원 단추를 쓸 수 없음: 이미 {팀이름들[내팀]}에 속해 있습니다.")
+    elif 내지원:
+        st.caption(f"지원 단추를 쓸 수 없음: {팀이름들[내지원.팀번호]}에 낸 지원이 대기 중입니다. 결과가 나온 뒤 다시 지원할 수 있습니다.")
+    elif 상태.마감:
+        st.caption("지원 단추를 쓸 수 없음: 모집이 마감되었습니다.")
+    st.caption(f"화면은 {다시그리기초}초마다 저절로 바뀝니다.")
+    for 팀, 칸 in zip(상태.팀들, 팀칸들(len(상태.팀들))):
+        with 칸, st.container(key=f"team_{팀['번호']}", border=True):
             표시 = " (내 팀)" if 팀["번호"] == 내팀 else ""
             st.markdown(f"**{팀['이름']}{표시}** · {len(팀['팀원'])}/4명")
             for 팀원 in 팀["팀원"]:
@@ -156,6 +183,9 @@ def 학생_본문(풀, 학번):
                 on_click=지원_누름,
                 args=(풀, 학번, 팀["번호"]),
             )
+
+    st.subheader("내 지원 기록")
+    지원기록_표(서비스.지원기록_읽기(풀, 학번), 지원자_보임=False)
 
     if 내팀 is None:
         return
@@ -205,8 +235,8 @@ def 확정_누름(풀):
 def 관리자_현황(풀):
     상태 = 서비스.상태_읽기(풀)
     st.subheader("지금 팀 구성")
-    for 팀 in 상태.팀들:
-        with st.container(key=f"team_{팀['번호']}", border=True):
+    for 팀, 칸 in zip(상태.팀들, 팀칸들(len(상태.팀들))):
+        with 칸, st.container(key=f"team_{팀['번호']}", border=True):
             st.markdown(f"**{팀['이름']}** · {len(팀['팀원'])}/4명")
             for 팀원 in 팀["팀원"]:
                 st.markdown(팀원_줄(상태.학생들[팀원]))
@@ -220,6 +250,9 @@ def 관리자_현황(풀):
             st.markdown(팀원_줄(사람))
         if not 미배정:
             st.caption("팀이 없는 학생이 없습니다.")
+    st.caption(f"화면은 {다시그리기초}초마다 저절로 바뀝니다.")
+    st.markdown("**지원 기록**")
+    지원기록_표(서비스.지원기록_읽기(풀), 지원자_보임=True)
 
 
 def 배정안_보이기(상태):
@@ -252,12 +285,15 @@ def 관리자_화면(풀):
     st.button("모집 마감", key="admin_close", on_click=마감_누름, args=(풀,))
 
     st.subheader("3. AI 배정과 확정")
+    st.checkbox("AI를 부름 (끄면 AI 없이 앱이 바로 배정함. 연습할 때 AI 호출 횟수를 아낄 수 있음)", value=True, key="admin_use_ai")
     배정누름 = st.button("AI 배정", key="admin_assign")
     with st.container(key="assign_status"):
         if 배정누름:
             진행칸 = st.empty()
             모델들 = [설정값(f"AI_MODEL_{순서}", 기본) for 순서, 기본 in enumerate(인공지능.기본모델들, start=1)]
-            결과, 안내 = 서비스.AI_배정(풀, 설정값("OPENROUTER_API_KEY"), 모델들, 진행표시=진행칸.info)
+            결과, 안내 = 서비스.AI_배정(
+                풀, 설정값("OPENROUTER_API_KEY"), 모델들, 진행표시=진행칸.info, AI사용=st.session_state["admin_use_ai"]
+            )
             진행칸.empty()
             결과_정하기(결과)
             st.session_state["배정상태"] = 안내
