@@ -1,4 +1,4 @@
-# 작성: 2026-10-29 21:57 (수정: 2026-10-29 22:55 시범 앱 녹화를 보고 지원 기록, AI 끄기, 팀 칸 나란히 보기 추가; 2026-10-30 01:27 DB 연결 실패를 관리자 계정 준비 단계에서도 짧은 안내로 보여 줌)
+# 작성: 2026-10-29 21:57 (수정: 2026-10-29 22:55 시범 앱 녹화를 보고 지원 기록, AI 끄기, 팀 칸 나란히 보기 추가; 2026-10-30 01:27 DB 연결 실패를 관리자 계정 준비 단계에서도 짧은 안내로 보여 줌; 2026-10-31 23:16 AI 배정을 화면 실행과 따로 도는 스레드로 옮겨 연결이 끊겨도 끝까지 진행되게 함)
 """팀 프로젝트를 위한 팀 편성 웹 앱(Streamlit).
 
 화면 요소의 key는 공고 2.7절 표를 그대로 따릅니다. 자동 채점 프로그램이 key로 요소를 찾기 때문입니다.
@@ -7,6 +7,8 @@
 
 import hashlib
 import os
+import threading
+import time
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -52,6 +54,52 @@ def 지문(값):
     return hashlib.sha256(값.encode("utf-8")).hexdigest()
 
 
+class AI배정작업:
+    """AI 배정을 화면 실행과 따로 도는 스레드에서 진행합니다.
+
+    화면은 다시 그려지거나 브라우저 연결이 잠깐 끊기면 하던 실행을 멈춥니다. AI 배정을 화면 실행 안에서 하면
+    몇 분짜리 배정이 중간에 조용히 사라지므로, 스레드에서 끝까지 하고 화면은 진행 안내와 결과만 가져다 보여 줍니다.
+    """
+
+    def __init__(self):
+        self.잠금 = threading.Lock()
+        self.진행중 = False
+        self.번호 = 0  # 지금(또는 마지막) 작업의 번호
+        self.진행안내 = ""
+        self.결과 = ""  # 마지막 작업의 결과 안내(승인/막힘)
+        self.안내 = ""  # 마지막 작업의 진행 경과
+
+    def 시작(self, 풀, 키, 모델들, AI사용):
+        with self.잠금:
+            if self.진행중:
+                return self.번호
+            self.진행중 = True
+            self.번호 += 1
+            self.진행안내 = "AI 배정을 시작하는 중"
+            번호 = self.번호
+
+        def 실행():
+            try:
+                결과, 안내 = 서비스.AI_배정(풀, 키, 모델들, 진행표시=self._진행_적기, AI사용=AI사용)
+            except Exception as 오류:
+                결과 = f"막힘: AI 배정 중 오류가 남({type(오류).__name__}). 다시 눌러 주세요"
+                안내 = "AI 배정 중 오류가 났습니다."
+            with self.잠금:
+                self.결과, self.안내, self.진행중 = 결과, 안내, False
+
+        threading.Thread(target=실행, daemon=True).start()
+        return 번호
+
+    def _진행_적기(self, 문장):
+        self.진행안내 = 문장
+
+
+@st.cache_resource(show_spinner=False)
+def AI배정작업_가져오기():
+    # 앱이 살아 있는 동안 모든 화면이 같은 작업 상태를 봅니다.
+    return AI배정작업()
+
+
 # ---------------------------------------------------------------- 공통
 
 
@@ -74,7 +122,7 @@ def 결과_정하기(결과):
 
 
 def 로그아웃():
-    for 이름 in ("사용자", "결과", "배정상태"):
+    for 이름 in ("사용자", "결과", "기다리는작업"):
         st.session_state.pop(이름, None)
 
 
@@ -220,7 +268,9 @@ def 명단_누름(풀):
         결과_정하기("막힘: 명단 CSV 파일을 골라 주세요")
         return
     결과_정하기(서비스.명단_올리기(풀, 파일.getvalue(), int(st.session_state["admin_team_count"])))
-    st.session_state.pop("배정상태", None)
+    작업 = AI배정작업_가져오기()
+    if not 작업.진행중:
+        작업.안내 = ""
 
 
 def 마감_누름(풀):
@@ -286,20 +336,28 @@ def 관리자_화면(풀):
 
     st.subheader("3. AI 배정과 확정")
     st.checkbox("AI를 부름 (끄면 AI 없이 앱이 바로 배정함. 연습할 때 AI 호출 횟수를 아낄 수 있음)", value=True, key="admin_use_ai")
-    배정누름 = st.button("AI 배정", key="admin_assign")
+    작업 = AI배정작업_가져오기()
+    배정누름 = st.button("AI 배정", key="admin_assign", disabled=작업.진행중)
     with st.container(key="assign_status"):
         if 배정누름:
-            진행칸 = st.empty()
             모델들 = [설정값(f"AI_MODEL_{순서}", 기본) for 순서, 기본 in enumerate(인공지능.기본모델들, start=1)]
-            결과, 안내 = 서비스.AI_배정(
-                풀, 설정값("OPENROUTER_API_KEY"), 모델들, 진행표시=진행칸.info, AI사용=st.session_state["admin_use_ai"]
+            st.session_state["기다리는작업"] = 작업.시작(
+                풀, 설정값("OPENROUTER_API_KEY"), 모델들, st.session_state["admin_use_ai"]
             )
+        elif 작업.진행중:
+            # 연결이 끊겼다 다시 붙었거나 새로 열린 화면도 진행 중인 배정을 이어서 기다립니다.
+            st.session_state["기다리는작업"] = 작업.번호
+        if "기다리는작업" in st.session_state:
+            진행칸 = st.empty()
+            while 작업.진행중:
+                진행칸.info(작업.진행안내)
+                time.sleep(1)
             진행칸.empty()
-            결과_정하기(결과)
-            st.session_state["배정상태"] = 안내
+            if st.session_state.pop("기다리는작업") == 작업.번호:
+                결과_정하기(작업.결과)
             상태 = 서비스.상태_읽기(풀)
-        if st.session_state.get("배정상태"):
-            st.info(st.session_state["배정상태"])
+        if 작업.안내:
+            st.info(작업.안내)
     배정안_보이기(상태)
     st.button("배정안 확정", key="admin_confirm", type="primary", on_click=확정_누름, args=(풀,))
 
